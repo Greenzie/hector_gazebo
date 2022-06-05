@@ -48,6 +48,13 @@ namespace gazebo
 class GazeboRosGps : public ModelPlugin
 {
 public:
+  enum DropoutSet
+  {
+      DROPOUT_NONE = 0,
+      DROPOUT_ONCE = 1,
+      DROPOUT_REPEAT = 2
+  };
+
   GazeboRosGps();
   virtual ~GazeboRosGps();
 
@@ -93,6 +100,32 @@ private:
 
   double radius_north_;
   double radius_east_;
+
+  // Optional delay in seconds before first fix
+  double delayed_start_min_s_{0.0};
+  double delayed_start_max_s_{0.0};
+  // Optional dropout parameters (loss of fix)
+  double dropout_length_min_s_{0.0};
+  double dropout_length_max_s_{0.0};
+  double dropout_delay_min_s_{0.0};
+  double dropout_delay_max_s_{0.0};
+  // Sets whether the dropout occurs (0=no, 1=once, 2=repeating)
+  DropoutSet dropout_set_{DropoutSet::DROPOUT_NONE};
+
+  // Discrete jumps
+  double jump_delay_min_s_{0.0};
+  double jump_delay_max_s_{0.0};
+  double jump_max_m_{0.0};  // In each dimension
+  double jump_min_m_{0.0};  // In each dimension
+  bool jump_3d_{false};  // Whether can jump 3D
+  DropoutSet jump_set_{DropoutSet::DROPOUT_NONE};
+
+  // Handles dropout/delay control
+  bool has_fix_{true};  // Default unless in a dropout or delayed start
+  double next_dropout_change_s_{0.0};  // Time until next dropout change in seconds from the last change
+  common::Time last_dropout_change_{0.0};  // Time of the last dropout change in seconds
+  double next_jump_change_s_{0.0};  // Time until next jump change in seconds from the last change
+  common::Time last_jump_change_{0.0};  // Time of the last jump change in seconds
 
   SensorModel3 position_error_model_;
   SensorModel3 velocity_error_model_;
