@@ -1,0 +1,13 @@
+Source: ros-noetic-hector-gazebo-plugins
+Section: misc
+Priority: optional
+Maintainer: Stefan Fabian <fabian@sim.tu-darmstadt.de>
+Build-Depends: debhelper (>= 9.0.0), ros-noetic-catkin, ros-noetic-dynamic-reconfigure, ros-noetic-gazebo-dev, ros-noetic-geographic-msgs, ros-noetic-geometry-msgs, ros-noetic-message-generation, ros-noetic-nav-msgs, ros-noetic-roscpp, ros-noetic-std-msgs, ros-noetic-std-srvs, ros-noetic-tf
+Homepage: http://ros.org/wiki/hector_gazebo_plugins
+Standards-Version: 3.9.2
+
+Package: ros-noetic-hector-gazebo-plugins
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, gazebo11, ros-noetic-dynamic-reconfigure, ros-noetic-gazebo-ros, ros-noetic-geographic-msgs, ros-noetic-geometry-msgs, ros-noetic-message-runtime, ros-noetic-nav-msgs, ros-noetic-roscpp, ros-noetic-std-msgs, ros-noetic-std-srvs, ros-noetic-tf
+Description: hector_gazebo_plugins provides gazebo plugins from Team Hector.
+ Currently it contains a 6wd differential drive plugin, an IMU sensor plugin, an earth magnetic field sensor plugin, a GPS sensor plugin and a sonar ranger plugin.
