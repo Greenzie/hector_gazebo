@@ -1,0 +1,36 @@
+<!-- Example configuration for delayed start and failure parameters-->
+<!-- Adds a virtual GPS that publishes data -->
+  <gazebo>
+    <plugin name="gazebo_ros_gps" filename="libhector_gazebo_ros_gps.so">
+      <!-- Minimum time in seconds until the odometry starts being published -->
+      <delayedStartMinS>1.0</delayedStartMinS>
+
+      <!-- Maximum time in seconds until the odometry starts being published.
+        Set to 0 for no delay -->
+      <delayedStartMaxS>2.0</delayedStartMaxS>
+
+      <!-- Minimum time in seconds of each dropout -->
+      <dropoutLengthMinS>0.0</dropoutLengthMinS>
+
+      <!-- Maximum time in seconds of each dropout -->
+      <dropoutLengthMaxS>0.0</dropoutLengthMaxS>
+
+      <!-- Minimum time in seconds between each dropout -->
+      <dropoutDelayMinS>0.0</dropoutDelayMinS>
+
+      <!-- Maximum time in seconds between each dropout -->
+      <dropoutDelayMaxS>0.0</dropoutDelayMaxS>
+
+      <!-- No dropouts (0). Set to 1 for a single dropout (independent of delayed start)
+        or 2 for repeating -->
+      <dropoutSet>0</dropoutSet>
+
+
+      <jumpDelayMinS>0.0</jumpDelayMinS>
+      <jumpDelayMaxS>0.0</jumpDelayMaxS>
+      <jumpMinM>0.0</jumpMinM>
+      <jumpMaxM>0.0</jumpMaxM>
+      <jump3D>false</jump3D>
+      <jumpSet>0</jumpSet>  <!-- No jumps (0). Set to 1 for a single or 2 for repeating -->
+    </plugin>
+  </gazebo>
