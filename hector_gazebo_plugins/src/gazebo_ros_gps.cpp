@@ -149,6 +149,54 @@ void GazeboRosGps::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
       fix_.status.service = static_cast<sensor_msgs::NavSatStatus::_service_type>(service);
   }
 
+  // Dropouts
+  if (_sdf->HasElement("delayedStartMinS")) {
+    _sdf->GetElement("delayedStartMinS")->GetValue()->Get(delayed_start_min_s_);
+  }
+  if (_sdf->HasElement("delayedStartMaxS")) {
+    _sdf->GetElement("delayedStartMaxS")->GetValue()->Get(delayed_start_max_s_);
+  }
+  if (_sdf->HasElement("dropoutLengthMinS")) {
+    _sdf->GetElement("dropoutLengthMinS")->GetValue()->Get(dropout_length_min_s_);
+  }
+  if (_sdf->HasElement("dropoutLengthMaxS")) {
+    _sdf->GetElement("dropoutLengthMaxS")->GetValue()->Get(dropout_length_max_s_);
+  }
+  if (_sdf->HasElement("dropoutDelayMinS")) {
+    _sdf->GetElement("dropoutDelayMinS")->GetValue()->Get(dropout_delay_min_s_);
+  }
+  if (_sdf->HasElement("dropoutDelayMaxS")) {
+    _sdf->GetElement("dropoutDelayMaxS")->GetValue()->Get(dropout_delay_max_s_);
+  }
+  
+  int dropout_set = static_cast<int>(dropout_set_);
+  if (_sdf->HasElement("dropoutSet")) {
+    _sdf->GetElement("dropoutSet")->GetValue()->Get(dropout_set);
+  }
+  dropout_set_ = static_cast<DropoutSet>(dropout_set);
+
+  // Discrete jumps
+  if (_sdf->HasElement("jumpDelayMinS")) {
+    _sdf->GetElement("jumpDelayMinS")->GetValue()->Get(jump_delay_min_s_);
+  }
+  if (_sdf->HasElement("jumpDelayMaxS")) {
+    _sdf->GetElement("jumpDelayMaxS")->GetValue()->Get(jump_delay_max_s_);
+  }
+  if (_sdf->HasElement("jumpMinM")) {
+    _sdf->GetElement("jumpMinM")->GetValue()->Get(jump_min_m_);
+  }
+  if (_sdf->HasElement("jumpMaxM")) {
+    _sdf->GetElement("jumpMaxM")->GetValue()->Get(jump_max_m_);
+  }
+  if (_sdf->HasElement("jump3D")) {
+    _sdf->GetElement("jump3D")->GetValue()->Get(jump_3d_);
+  }
+  
+  int jump_set = static_cast<int>(jump_set_);
+  if (_sdf->HasElement("jumpSet")) {
+    _sdf->GetElement("jumpSet")->GetValue()->Get(jump_set);
+  }
+  jump_set_ = static_cast<DropoutSet>(jump_set);
 
   fix_.header.frame_id = frame_id_;
   velocity_.header.frame_id = frame_id_;
@@ -185,6 +233,31 @@ void GazeboRosGps::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
   dynamic_reconfigure_server_status_->setCallback(boost::bind(&GazeboRosGps::dynamicReconfigureCallback, this, _1, _2));
 
   Reset();
+
+  // Set up the dropouts
+  if(delayed_start_max_s_ > 0.00001)
+  {
+    ROS_DEBUG_STREAM("GPS has no fix");
+    has_fix_ = false;  // Initialize to not fixed
+    next_dropout_change_s_ = (delayed_start_max_s_ - delayed_start_min_s_) *
+      (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) + delayed_start_min_s_;
+  } else if(dropout_set_ != DropoutSet::DROPOUT_NONE) {
+    // Set the first time to dropout
+    next_dropout_change_s_ = (dropout_delay_max_s_ - dropout_delay_min_s_) *
+      (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) + dropout_delay_min_s_;
+  }
+  // Set up the first jump
+  if(jump_set_ != DropoutSet::DROPOUT_NONE) {
+    // Set the first time to jump
+    next_jump_change_s_ = (jump_delay_max_s_ - jump_delay_min_s_) *
+      (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) + jump_delay_min_s_;
+  }
+#if (GAZEBO_MAJOR_VERSION >= 8)
+  last_dropout_change_ = world->SimTime();
+#else
+  last_dropout_change_ = world->GetSimTime();
+#endif
+  last_jump_change_ = last_dropout_change_;
 
   // connect Update function
   updateTimer.setUpdateRate(4.0);
@@ -299,8 +372,77 @@ void GazeboRosGps::Update()
   fix_.position_covariance[8] = position_error_model_.drift.z*position_error_model_.drift.z + position_error_model_.gaussian_noise.z*position_error_model_.gaussian_noise.z;
 #endif
 
-  fix_publisher_.publish(fix_);
+  // Handle whether there is a fix
+  if(!has_fix_) {
+    int8_t temp = fix_.status.status;
+    fix_.status.status = sensor_msgs::NavSatStatus::STATUS_NO_FIX;  // Currently no fix
+    fix_publisher_.publish(fix_);
+    fix_.status.status = temp;  // Reset for next time
+  } else {
+    fix_publisher_.publish(fix_);
+  }
   velocity_publisher_.publish(velocity_);
+
+  // Handle dropout update
+  if((dropout_set_ != DropoutSet::DROPOUT_NONE) || (!has_fix_))
+  {
+    // If dropouts are defined or a delay occurred (so no read currently)
+    if((sim_time - last_dropout_change_).Double() > next_dropout_change_s_)
+    {
+      if(has_fix_)
+      {
+        // Going to no fix - need to see if we turn off any future dropouts
+        if(dropout_set_ == DropoutSet::DROPOUT_ONCE)
+        {
+          // By doing the change this way, a delay and a single dropout still functions correctly.
+          dropout_set_ = DropoutSet::DROPOUT_NONE;
+        }
+        // Already know a dropout should occur in this if statement
+        // Calculate the length of the dropout
+        next_dropout_change_s_ = (dropout_length_max_s_ - dropout_length_min_s_) *
+          (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) + dropout_length_min_s_;
+      }
+      else if(dropout_set_ != DropoutSet::DROPOUT_NONE)
+      {
+        // Currently is no fixand will have another dropout
+        next_dropout_change_s_ = (dropout_delay_max_s_ - dropout_delay_min_s_) *
+          (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) + dropout_delay_min_s_;
+      }
+      // else: is no fix, but no more dropouts - just go to fix without anything further.
+
+      // Make the change
+      has_fix_ = !has_fix_;
+      ROS_DEBUG_STREAM("GPS has fix: " << has_fix_);
+      // Reset the last dropout change
+      last_dropout_change_ = sim_time;
+    }
+  }
+
+  // Handle jump update
+  if((jump_set_ != DropoutSet::DROPOUT_NONE) &&
+    ((sim_time - last_jump_change_).Double() > next_jump_change_s_))
+  {
+    // Making jump - check if future jumps required
+    if(jump_set_ == DropoutSet::DROPOUT_ONCE)
+    {
+      jump_set_ = DropoutSet::DROPOUT_NONE;
+    }
+    // Make the jump
+    uint8_t max_index = (jump_3d_) ? 3 : 2;  // Handle 2D or 3D jumps
+    for(uint8_t index = 0; index < max_index; index++) {
+      position_error_model_.offset[index] +=
+        ((static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) * 2.0 - 1.0) *
+        (jump_max_m_ - jump_min_m_) + jump_min_m_;
+    }
+    ROS_DEBUG_STREAM("GPS jumped");
+
+    // Calculate the length of the dropout
+    next_jump_change_s_ = (jump_delay_max_s_ - jump_delay_min_s_) *
+      (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)) + jump_delay_min_s_;
+
+    // Reset the last jump change
+    last_jump_change_ = sim_time;
+  }
 }
 
 // Register this plugin with the simulator
